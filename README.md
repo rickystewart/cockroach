@@ -4,6 +4,8 @@
 
 ---
 
+what's up
+
 CockroachDB is a cloud-native SQL database for building global, scalable cloud services that survive disasters.
 
 - [What is CockroachDB?](#what-is-cockroachdb)
