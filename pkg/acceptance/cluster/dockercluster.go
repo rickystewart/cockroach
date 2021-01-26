@@ -544,6 +544,8 @@ func (l *DockerCluster) processEvent(ctx context.Context, event events.Message) 
 		return true
 	}
 
+	fmt.Println("processing event: ", event)
+
 	for i, n := range l.Nodes {
 		if n != nil && n.id == event.ID {
 			if log.V(1) {
