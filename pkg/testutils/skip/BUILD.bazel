@@ -4,7 +4,6 @@ go_library(
     name = "skip",
     srcs = [
         "skip.go",
-        "stress.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/skip",
     visibility = ["//visibility:public"],

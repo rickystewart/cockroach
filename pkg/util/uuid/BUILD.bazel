@@ -22,17 +22,11 @@ go_library(
 go_test(
     name = "uuid_test",
     srcs = [
-        "benchmark_fast_test.go",
         "codec_test.go",
-        "generator_test.go",
-        "sql_test.go",
-        "uuid_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":uuid"],
     deps = [
         "//pkg/testutils/skip",
-        "//pkg/util/timeutil",
-        "@com_github_cockroachdb_errors//:errors",
     ],
 )
