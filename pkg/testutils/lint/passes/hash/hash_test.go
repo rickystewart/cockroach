@@ -15,6 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/hash"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	_ "github.com/cockroachdb/cockroach/pkg/testutils/bazelcompat"
+	_ "github.com/cockroachdb/cockroach/pkg/testutils/stagebazelgotoolchain"
 	"golang.org/x/tools/go/analysis/analysistest"
 )
 

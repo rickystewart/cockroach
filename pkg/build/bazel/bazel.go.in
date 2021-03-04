@@ -1,0 +1,42 @@
+// Copyright 2015 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package bazel
+
+import (
+	inner "github.com/bazelbuild/rules_go/go/tools/bazel"
+)
+
+// Return true iff this library was built with Bazel. All other functions in
+// this library won't return a meaningful value unless this function returns
+// true. (Note that bazel_noop.go will be compiled for non-Bazel builds.)
+func BuiltWithBazel() bool {
+	return true
+}
+
+// For all remaining functions, see documentation at
+// https://pkg.go.dev/github.com/bazelbuild/rules_go/go/tools/bazel.
+// They only return a meaningful value if BuiltWithBazel().
+
+func FindBinary(pkg, name string) (string, bool) {
+	return inner.FindBinary(pkg, name)
+}
+
+func Runfile(path string) (string, error) {
+	return inner.Runfile(path)
+}
+
+func RunfilesPath() (string, error) {
+	return inner.RunfilesPath()
+}
+
+func TestTmpDir() string {
+	return inner.TestTmpDir()
+}

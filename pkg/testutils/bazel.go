@@ -15,7 +15,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 )
 
 //
@@ -31,49 +31,9 @@ import (
 //
 // Bazel also sets up various environmental variables that point to the location(s) of
 // those resources.
-//
-
-// Name of the environment variable pointing to the absolute path to the base of the RUNFILES tree.
-const testSrcDirEnv = "TEST_SRCDIR"
-
-// Name of the environment variable containing the name of the "workspace".
-const testWorkspaceEnv = "TEST_WORKSPACE"
-
-// Name of the environment variable pointing to the absolute path of the
-// temporary directory created for the execution of the test.
-const testTmpDirEnv = "TEST_TMPDIR"
 
 // Name of the environment variable containing the bazel target path (//pkg/cmd/foo:bar).
 const testTargetEnv = "TEST_TARGET"
-
-// runningUnderBazel returns true if the test is executed by bazel.
-func runningUnderBazel() bool {
-	return os.Getenv(testSrcDirEnv) != ""
-}
-
-func requireEnv(env string) string {
-	if v := os.Getenv(env); v != "" {
-		return v
-	}
-	panic(errors.AssertionFailedf("expected value for env: %s", env))
-}
-
-// TestSrcDir returns the path to the "source" tree.
-//
-// If running under bazel, this will point to a private, *readonly*
-// directory containing symlinks (or copies) of the test data dependencies.
-// This directory must be treated readonly.  It's an error to try to modify
-// anything under this directory: though the operation may succeed, the test
-// would not be hermetic, and may fail under other environments.
-func TestSrcDir() string {
-	// If testSrcDirEnv is not set, it means we are not running under bazel,
-	// and so we can use "" as our directory which should point to the
-	// src root.
-	if srcDir := os.Getenv(testSrcDirEnv); srcDir != "" {
-		return srcDir
-	}
-	return ""
-}
 
 // bazeRelativeTargetPath returns relative path to the package
 // of the current test.
@@ -90,21 +50,20 @@ func bazelRelativeTargetPath() string {
 	return strings.TrimPrefix(target, "//")
 }
 
-// TestDataPath returns a path to the directory containing test data files.
+// TestDataPath returns a path to an asset in the testdata directory.
 //
-// Test files are usually checked into the repository under "testdata" directory.
-// If we are not using bazel, then the test executes in the directory of
-// the actual test, so the files can be referenced via "testdata/subdir/file" relative path.
-//
-// However, if we are running under bazel, the data files are specified
-// via go_test "data" attribute.  These files, in turn, are available under RUNFILES directory.
-// This helper attempts to construct appropriate path to the RUNFILES directory
-// containing test data files, given the relative (to the test) path components.
-//
-func TestDataPath(relative ...string) string {
-	if runningUnderBazel() {
-		return path.Join(TestSrcDir(), requireEnv(testWorkspaceEnv), bazelRelativeTargetPath(),
-			path.Join(relative...))
+// For example, if there is a file testdata/a.txt, you can get a path to that
+// file with TestDataPath("a.txt").
+func TestDataPath(relative ...string) (string, error) {
+	relative = append([]string{"testdata"}, relative...)
+	if bazel.BuiltWithBazel() {
+		runfiles, err := bazel.RunfilesPath()
+		if err != nil {
+			return "", err
+		}
+		return path.Join(runfiles, bazelRelativeTargetPath(), path.Join(relative...)), nil
 	}
-	return path.Join(relative...)
+	// If we're not running in Bazel, we're in the package directory and can
+	// just return a relative path.
+	return path.Join(relative...), nil
 }

@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+# gazelle:exclude bazel_noop.go
+
+# Rename bazel.go.in -> bazel.go. (This keeps the go build system from seeing
+# bazel.go.)
+genrule(
+    name = "bazel_go_genrule",
+    srcs = ["bazel.go.in"],
+    outs = ["bazel.go"],
+    cmd = "cp $< $@",
+)
+
+# keep
+go_library(
+    name = "bazel",
+    srcs = [":bazel.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/build/bazel",
+    visibility = ["//visibility:public"],
+    deps = ["@io_bazel_rules_go//go/tools/bazel"],
+)

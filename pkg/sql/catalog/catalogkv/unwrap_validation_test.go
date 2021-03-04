@@ -34,7 +34,8 @@ import (
 // will hold a file "descriptors.csv" which is a csv of id,descriptor where
 // descriptor is hex encoded.
 func TestUnwrapValidation(t *testing.T) {
-	testdata := testutils.TestDataPath("testdata", "unwrap_validation")
+	testdata, err := testutils.TestDataPath("unwrap_validation")
+	require.NoError(t, err)
 	const descriptorsCSVFilename = "descriptors.csv"
 	dirs, err := ioutil.ReadDir(testdata)
 	require.NoError(t, err)
