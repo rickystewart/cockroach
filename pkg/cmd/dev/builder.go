@@ -12,15 +12,18 @@ package main
 
 import (
 	"context"
-	"log"
+	"fmt"
+	"os"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
-const volumeFlag = "volume"
+const homeDirFlag = "home-dir"
 
 // MakeBuilderCmd constructs the subcommand used to run
 func makeBuilderCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
@@ -32,40 +35,37 @@ func makeBuilderCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.C
 		Args:    cobra.ExactArgs(0),
 		RunE:    runE,
 	}
-	builderCmd.Flags().String(volumeFlag, "bzlcache", "the Docker volume to use as the Bazel cache")
+	builderCmd.Flags().String(homeDirFlag, "",
+		"directory to mount as the home directory in the container")
 	return builderCmd
 }
 
 func (d *dev) builder(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
-	volume := mustGetFlagString(cmd, volumeFlag)
-	args, err := d.getDockerRunArgs(ctx, volume, true)
+	homeDir := mustGetFlagString(cmd, homeDirFlag)
+	args, err := d.getDockerRunArgs(ctx, homeDir, true)
 	if err != nil {
 		return err
 	}
 	return d.exec.CommandContextInheritingStdStreams(ctx, "docker", args...)
 }
 
-func (d *dev) ensureDockerVolume(ctx context.Context, volume string) error {
-	_, err := d.exec.CommandContextSilent(ctx, "docker", "volume", "inspect", volume)
-	if err != nil {
-		log.Printf("Creating volume %s with Docker...", volume)
-		_, err := d.exec.CommandContextSilent(ctx, "docker", "volume", "create", volume)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (d *dev) getDockerRunArgs(
-	ctx context.Context, volume string, tty bool,
+	ctx context.Context, homeDir string, tty bool,
 ) (args []string, err error) {
 	err = d.ensureBinaryInPath("docker")
 	if err != nil {
 		return
 	}
-	err = d.ensureDockerVolume(ctx, volume)
+	if homeDir == "" {
+		var cacheDir string
+		cacheDir, err = os.UserCacheDir()
+		if err != nil {
+			return
+		}
+		homeDir = filepath.Join(cacheDir, "cockroachbuild", "bzlhome")
+	}
+	err = d.os.MkdirAll(homeDir)
 	if err != nil {
 		return
 	}
@@ -92,7 +92,40 @@ func (d *dev) getDockerRunArgs(
 	// The `delegated` switch ensures that the container's view of the cache
 	// is authoritative. This can result in writes to the actual underlying
 	// filesystem to be lost, but it's a cache so we don't care about that.
-	args = append(args, "-v", volume+":/root/.cache/bazel:delegated")
+	args = append(args, "-v", homeDir+":/home/roach:delegated")
+
+	// Apply the same munging for the UID/GID that we do in build/builder.sh.
+	// Quoth a comment from there:
+	// Attempt to run in the container with the same UID/GID as we have on the host,
+	// as this results in the correct permissions on files created in the shared
+	// volumes. This isn't always possible, however, as IDs less than 100 are
+	// reserved by Debian, and IDs in the low 100s are dynamically assigned to
+	// various system users and groups. To be safe, if we see a UID/GID less than
+	// 500, promote it to 501. This is notably necessary on macOS Lion and later,
+	// where administrator accounts are created with a GID of 20. This solution is
+	// not foolproof, but it works well in practice.
+	currentUser, err := user.Current()
+	if err != nil {
+		return
+	}
+	uid := currentUser.Uid
+	uidInt, err := strconv.Atoi(uid)
+	if err != nil {
+		return
+	}
+	if uidInt < 500 {
+		uid = "501"
+	}
+	gid := currentUser.Gid
+	gidInt, err := strconv.Atoi(gid)
+	if err != nil {
+		return
+	}
+	if gidInt < 500 {
+		gid = uid
+	}
+	args = append(args, "-u", fmt.Sprintf("%s:%s", uid, gid))
+	
 	// Read the Docker image from build/teamcity-bazel-support.sh.
 	buf, err := d.os.ReadFile(filepath.Join(workspace, "build/teamcity-bazel-support.sh"))
 	if err != nil {
