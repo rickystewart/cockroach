@@ -21,6 +21,8 @@ go_binary(
         "//:DEPS.bzl",
         "//:go.mod",
         "//:go.sum",
+        "//tools/bazel-remote:go.mod",
+        "//tools/bazel-remote:go.sum",
         "//build/patches:all_patches",
         "@go_sdk//:files",
     ],
