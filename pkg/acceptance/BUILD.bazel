@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build/bazelutil:whereis.bzl", "whereis_binary")
 
 go_library(
     name = "acceptance",
@@ -56,4 +57,9 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/util/log",
     ],
+)
+
+whereis_binary(
+    name = "whereis_acceptance_test",
+    target = ":acceptance_test",
 )
