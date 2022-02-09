@@ -145,6 +145,7 @@ func (d *dev) crossBuild(
 	ctx context.Context, bazelArgs []string, targets []buildTarget, crossConfig string, volume string,
 ) error {
 	bazelArgs = append(bazelArgs, fmt.Sprintf("--config=%s", crossConfig), "--config=ci")
+	configArgs := getConfigArgs(bazelArgs)
 	dockerArgs, err := d.getDockerRunArgs(ctx, volume, false)
 	if err != nil {
 		return err
@@ -164,9 +165,9 @@ func (d *dev) crossBuild(
 		}
 	}
 	for _, target := range targets {
-		output := bazelutil.OutputOfBinaryRule(target.fullName, strings.Contains(crossConfig, "windows"))
-		script.WriteString(fmt.Sprintf("cp $BAZELBIN/%s /artifacts\n", output))
-		script.WriteString(fmt.Sprintf("chmod a+w /artifacts/%s", filepath.Base(output)))
+		script.WriteString(fmt.Sprintf("BIN=$(bazel run %s %s --run_under=//build/bazelutil/whereis)\n", target.fullName, shellescape.QuoteCommand(configArgs)))
+		script.WriteString("cp $BIN /artifacts\n")
+		script.WriteString("chmod a+w $(basename $BIN)")
 	}
 	_, err = d.exec.CommandContextWithInput(ctx, script.String(), "docker", dockerArgs...)
 	if err != nil {
@@ -425,4 +426,15 @@ func (d *dev) hoistGeneratedCode(ctx context.Context, workspace string, bazelBin
 
 func logSuccessfulBuild(target, rel string) {
 	log.Printf("Successfully built binary for target %s at %s", target, rel)
+}
+
+// Given a list of Bazel arguments, find the ones starting with --config= and
+// return them.
+func getConfigArgs(args []string) (ret []string) {
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--config=") {
+			ret = append(ret, arg)
+		}
+	}
+	return
 }
