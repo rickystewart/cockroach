@@ -14,7 +14,7 @@
 "use strict";
 
 const webpackConfig = require("./webpack.app")(
-  { dist: "ccl" },
+    { dist: "ccl", is_bazel_build: !!process.env.is_bazel_build, root_dir: process.env.root_dir },
   { mode: "development" },
 );
 

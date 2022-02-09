@@ -42,8 +42,17 @@ function shouldProxy(reqPath) {
 module.exports = (env, argv) => {
   env = env || {};
   const isBazelBuild = env.is_bazel_build;
+  const rootDir = env.root_dir;
 
-  let localRoots = [path.resolve(__dirname)];
+  
+  let localRoots = [];
+  if (rootDir) {
+    localRoots.push(path.resolve(rootDir))
+    if (env.dist === "ccl") {
+      localRoots.unshift(path.resolve(rootDir, "ccl"));
+    }     
+  }
+  localRoots.push(path.resolve(__dirname))
   if (env.dist === "ccl") {
     // CCL modules shadow OSS modules.
     localRoots.unshift(path.resolve(__dirname, "ccl"));
@@ -115,7 +124,8 @@ module.exports = (env, argv) => {
       modules: modules,
       alias: {
         oss: path.resolve(__dirname),
-        "src/js/protos": "@cockroachlabs/crdb-protobuf-client",
+          //"src/js/protos": path.resolve(rootDir || __dirname, "@cockroachlabs/crdb-protobuf-client")
+          "@cockroachlabs/crdb-protobuf-client": path.resolve(rootDir, "src", "js", "protos.js"),
       },
     },
 

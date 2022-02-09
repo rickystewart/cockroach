@@ -10,12 +10,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/url"
 	"os"
 	"os/signal"
-	"path"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -34,6 +36,7 @@ func makeUICmd(d *dev) *cobra.Command {
 	}
 
 	uiCmd.AddCommand(makeUIWatchCmd(d))
+	uiCmd.AddCommand(makeUITestCmd(d))
 
 	return uiCmd
 }
@@ -54,8 +57,8 @@ func getUIDirs(d *dev) (*UIDirectories, error) {
 	}
 
 	return &UIDirectories{
-		clusterUI: path.Join(workspace, "./pkg/ui/workspaces/cluster-ui"),
-		dbConsole: path.Join(workspace, "./pkg/ui/workspaces/db-console"),
+		clusterUI: filepath.Join(workspace, "./pkg/ui/workspaces/cluster-ui"),
+		dbConsole: filepath.Join(workspace, "./pkg/ui/workspaces/db-console"),
 	}, nil
 }
 
@@ -77,8 +80,8 @@ func makeUIWatchCmd(d *dev) *cobra.Command {
 		Long: `Starts a local web server that watches for JS file changes, automatically regenerating the UI
 
 Replaces 'make ui-watch'.`,
-		Args: cobra.MinimumNArgs(0),
-		RunE: func(cmd *cobra.Command, commandLine []string) error {
+		Args: cobra.MaximumNArgs(0),
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			// Create a context that cancels when OS signals come in
 			ctx, stop := signal.NotifyContext(d.cli.Context(), os.Interrupt, os.Kill)
 			defer stop()
@@ -123,21 +126,19 @@ Replaces 'make ui-watch'.`,
 			}
 			secure := mustGetFlagBool(cmd, secureFlag)
 
-			// `yarn` is required to be on a user's path, since it won't run via Bazel
-			err = d.ensureBinaryInPath("yarn")
-			if err != nil {
-				return err
-			}
-
 			dirs, err := getUIDirs(d)
 			if err != nil {
 				log.Fatalf("unable to find cluster-ui and db-console directories: %v", err)
 				return err
 			}
 
+			yarnBin, err := d.getPathToNodejsBin(ctx, "yarn")
+			if err != nil {
+				return err
+			}
 			// Start the cluster-ui watch task
 			nbExec := d.exec.AsNonBlocking()
-			err = nbExec.CommandContextInheritingStdStreams(ctx, "yarn", "--silent", "--cwd", dirs.clusterUI, "build:watch")
+			err = nbExec.CommandContextInheritingStdStreams(ctx, yarnBin, "--silent", "--cwd", dirs.clusterUI, "build:watch")
 			if err != nil {
 				log.Fatalf("Unable to watch cluster-ui for changes: %v", err)
 				return err
@@ -168,7 +169,7 @@ Replaces 'make ui-watch'.`,
 			}
 
 			// Start the db-console web server + watcher
-			err = nbExec.CommandContextInheritingStdStreams(ctx, "yarn", args...)
+			err = nbExec.CommandContextInheritingStdStreams(ctx, yarnBin, args...)
 			if err != nil {
 				log.Fatalf("Unable to serve db-console: %v", err)
 				return err
@@ -188,4 +189,61 @@ Replaces 'make ui-watch'.`,
 	watchCmd.Flags().Bool(ossFlag, false, "build only the open-source parts of the UI")
 
 	return watchCmd
+}
+
+// makeUITestCmd initializes the 'ui test' subcommand.
+func makeUITestCmd(d *dev) *cobra.Command {
+	testCmd := &cobra.Command{
+		Use: "test",
+		Short: "Runs all UI tests",
+		Long: "Runs all UI tests.",
+		Args: cobra.MaximumNArgs(0),
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
+			// Build prerequisites.
+			args := []string{"build", "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client", "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl", "//pkg/ui/workspaces/cluster-ui:cluster-ui"}
+			logCommand("bazel", args...)
+			err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+			if err != nil {
+				log.Fatalf("failed to build UI test prerequisites: %v", err)
+				return err
+			}
+			// Actually run the tests.
+			dirs, err := getUIDirs(d)
+			if err != nil {
+				log.Fatalf("unable to find cluster-ui and db-console directories: %v", err)
+				return err
+			}
+			yarnBin, err := d.getPathToNodejsBin(ctx, "yarn")
+			if err != nil {
+				return err
+			}
+			bazelBin, err := d.getBazelBin(ctx)
+			if err != nil {
+				return err
+			}
+			env := os.Environ()
+			env = append(env, "is_bazel_build=1")
+			env = append(env, fmt.Sprintf("root_dir=%s", filepath.Join(bazelBin, "pkg", "ui", "workspaces", "db-console")))
+			fmt.Printf("env is %v\n", env)
+			err = d.exec.CommandContextWithEnv(ctx, env, yarnBin, "--cwd", dirs.dbConsole, "run", "karma")
+			if err != nil {
+				return err
+			}
+			fmt.Println("started up karma :)")
+			return d.exec.CommandContextInheritingStdStreams(ctx, yarnBin, "--cwd", dirs.clusterUI, "ci")
+		},
+	}
+	return testCmd
+}
+
+
+// getPathToNodejsBin is a helper function that returns the absolute path of one
+// of the tools provided in the @nodejs repo (e.g. yarn, nodejs).
+func (d *dev) getPathToNodejsBin(ctx context.Context, tool string) (string, error) {
+	output, err := d.exec.CommandContextSilent(ctx, "bazel", "run", "@nodejs//:" + tool, "--run_under=//build/bazelutil/whereis")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
 }
