@@ -122,9 +122,10 @@ Typical usage:
 		makeDoctorCmd(ret.doctor),
 		makeGenerateCmd(ret.generate),
 		makeGoCmd(ret.gocmd),
-		makeMergeTestXMLsCmd(ret.mergeTestXMLs),
-		makeTestLogicCmd(ret.testlogic),
 		makeLintCmd(ret.lint),
+		makeMergeTestXMLsCmd(ret.mergeTestXMLs),
+		makeRoachprodStressCmd(ret.roachprodStress),
+		makeTestLogicCmd(ret.testlogic),
 		makeTestCmd(ret.test),
 		makeUICmd(&ret),
 	)

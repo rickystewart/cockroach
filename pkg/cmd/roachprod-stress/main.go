@@ -36,16 +36,20 @@ import (
 )
 
 var (
-	flags       = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
-	flagP       = flags.Int("p", runtime.GOMAXPROCS(0), "run `N` processes in parallel")
-	flagTimeout = flags.Duration("timeout", 0, "timeout each process after `duration`")
-	_           = flags.Bool("kill", true, "kill timed out processes if true, otherwise just print pid (to attach with gdb)")
-	flagFailure = flags.String("failure", "", "fail only if output matches `regexp`")
-	flagIgnore  = flags.String("ignore", "", "ignore failure if output matches `regexp`")
-	flagMaxTime = flags.Duration("maxtime", 0, "maximum time to run")
-	flagMaxRuns = flags.Int("maxruns", 0, "maximum number of runs")
-	_           = flags.Int("maxfails", 1, "maximum number of failures")
-	flagStderr  = flags.Bool("stderr", true, "output failures to STDERR instead of to a temp file")
+	flags            = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+	flagP            = flags.Int("p", runtime.GOMAXPROCS(0), "run `N` processes in parallel")
+	flagTimeout      = flags.Duration("timeout", 0, "timeout each process after `duration`")
+	_                = flags.Bool("kill", true, "kill timed out processes if true, otherwise just print pid (to attach with gdb)")
+	flagFailure      = flags.String("failure", "", "fail only if output matches `regexp`")
+	flagIgnore       = flags.String("ignore", "", "ignore failure if output matches `regexp`")
+	flagMaxTime      = flags.Duration("maxtime", 0, "maximum time to run")
+	flagMaxRuns      = flags.Int("maxruns", 0, "maximum number of runs")
+	_                = flags.Int("maxfails", 1, "maximum number of failures")
+	flagStderr       = flags.Bool("stderr", true, "output failures to STDERR instead of to a temp file")
+	flagTestBin      = flags.String("testbin", "", "location of the test binary")
+	flagStressBin    = flags.String("stressbin", "bin.docker_amd64/stress", "location of the stress binary")
+	flagRoachprodBin = flags.String("roachprodbin", "roachprod", "location of the roachprod binary")
+	flagLibDir       = flags.String("libdir", "lib.docker_amd64", "location of the directory containing the built geos directories")
 )
 
 func roundToSeconds(d time.Duration) time.Duration {
@@ -76,6 +80,9 @@ func run() error {
 
 	pkg := os.Args[2]
 	localTestBin := filepath.Base(pkg) + ".test"
+	if *flagTestBin != "" {
+		localTestBin = *flagTestBin
+	}
 	{
 		fi, err := os.Stat(pkg)
 		if err != nil {
@@ -122,25 +129,22 @@ func run() error {
 		}
 	}
 
-	cmd := exec.Command("roachprod", "status", "-q", cluster)
+	cmd := exec.Command(*flagRoachprodBin, "status", "-q", cluster)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return errors.Wrapf(err, "%s", out)
 	}
 	nodes := strings.Count(string(out), "\n") - 1
 
-	const stressBin = "bin.docker_amd64/stress"
-
-	cmd = exec.Command("roachprod", "put", cluster, stressBin)
+	cmd = exec.Command(*flagRoachprodBin, "put", cluster, *flagStressBin)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return err
 	}
 
-	const localLibDir = "lib.docker_amd64/"
-	if fi, err := os.Stat(localLibDir); err == nil && fi.IsDir() {
-		cmd = exec.Command("roachprod", "put", cluster, localLibDir, "lib")
+	if fi, err := os.Stat(*flagLibDir); err == nil && fi.IsDir() {
+		cmd = exec.Command(*flagRoachprodBin, "put", cluster, *flagLibDir, "lib")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -148,7 +152,7 @@ func run() error {
 		}
 	}
 
-	cmd = exec.Command("roachprod", "run", cluster, "mkdir -p "+pkg)
+	cmd = exec.Command(*flagRoachprodBin, "run", cluster, "mkdir -p "+pkg)
 	if err := cmd.Run(); err != nil {
 		return err
 	}
@@ -158,21 +162,21 @@ func run() error {
 		// other than the home directory. To deal with this we put the directory
 		// in the home directory and then move it.
 		tmpPath := "testdata" + strconv.Itoa(rand.Int())
-		cmd = exec.Command("roachprod", "run", cluster, "--", "rm", "-rf", testdataPath)
+		cmd = exec.Command(*flagRoachprodBin, "run", cluster, "--", "rm", "-rf", testdataPath)
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return errors.Wrapf(err, "failed to remove old testdata:\n%s", output)
 		}
-		cmd = exec.Command("roachprod", "put", cluster, testdataPath, tmpPath)
+		cmd = exec.Command(*flagRoachprodBin, "put", cluster, testdataPath, tmpPath)
 		if err := cmd.Run(); err != nil {
 			return errors.Wrap(err, "failed to copy testdata")
 		}
-		cmd = exec.Command("roachprod", "run", cluster, "mv", tmpPath, testdataPath)
+		cmd = exec.Command(*flagRoachprodBin, "run", cluster, "mv", tmpPath, testdataPath)
 		if err := cmd.Run(); err != nil {
 			return errors.Wrap(err, "failed to move testdata")
 		}
 	}
-	testBin := filepath.Join(pkg, localTestBin)
-	cmd = exec.Command("roachprod", "put", cluster, localTestBin, testBin)
+	testBin := filepath.Join(pkg, filepath.Base(localTestBin))
+	cmd = exec.Command(*flagRoachprodBin, "put", cluster, localTestBin, testBin)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -200,7 +204,7 @@ func run() error {
 	go func() {
 		<-ctx.Done()
 		fmt.Printf("shutting down\n")
-		_ = exec.Command("roachprod", "stop", cluster).Run()
+		_ = exec.Command(*flagRoachprodBin, "stop", cluster).Run()
 	}()
 
 	go func() {
@@ -268,10 +272,13 @@ func run() error {
 				}
 			}()
 			var stderr bytes.Buffer
-			cmd := exec.Command("roachprod",
+			cmd := exec.Command(*flagRoachprodBin,
 				"ssh", fmt.Sprintf("%s:%d", cluster, i), "--",
-				fmt.Sprintf("cd %s; GOTRACEBACK=all ~/stress %s ./%s %s",
+				// NB: Bazel-built tests will want COCKROACH_RELATIVE_TESTDATA set
+				// so they know to find testdata files relative to the CWD.
+				fmt.Sprintf("cd %s; GOTRACEBACK=all COCKROACH_RELATIVE_TESTDATA=1 ~/%s %s ./%s %s",
 					pkg,
+					filepath.Base(*flagStressBin),
 					strings.Join(stressArgs, " "),
 					filepath.Base(testBin),
 					strings.Join(testArgs, " ")))
