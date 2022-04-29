@@ -1,6 +1,6 @@
 load("@npm//webpack-cli:index.bzl", webpack = "webpack_cli")
 load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
-load("@npm//@bazel/typescript:index.bzl", "ts_project")
+load("@npm//typescript:index.bzl", "ts_project")
 load("@build_bazel_rules_nodejs//:index.bzl", "nodejs_test")
 load("@npm//typescript:index.bzl", "tsc_test")
 load("@npm//jest:index.bzl", "jest_test")

@@ -25,9 +25,17 @@ http_archive(
 # Like the above, but for nodeJS.
 http_archive(
     name = "build_bazel_rules_nodejs",
-    sha256 = "cfc289523cf1594598215901154a6c2515e8bf3671fd708264a6f6aefe02bf39",
+    sha256 = "280cefd3649b9648fdc444e9d6ed17c949152ff28d7e23638390ae8b93941d60",
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_nodejs-4.4.6.tar.gz",
+        "https://github.com/bazelbuild/rules_nodejs/releases/download/5.4.1/rules_nodejs-5.4.1.tar.gz",
+    ],
+)
+
+http_archive(
+    name = "rules_nodejs",
+    sha256 = "2f8e1d44d7fc0aa34c499e0b284f257552f42a1e403ee41cedbed5e40434d9b9",
+    urls = [
+        "https://github.com/bazelbuild/rules_nodejs/releases/download/5.4.1/rules_nodejs-core-5.4.1.tar.gz",
     ],
 )
 
@@ -197,6 +205,7 @@ go_register_toolchains(nogo = "@com_github_cockroachdb_cockroach//:crdb_nogo")
 
 # Configure nodeJS.
 load("@build_bazel_rules_nodejs//:index.bzl", "node_repositories", "yarn_install")
+load("@rules_nodejs//nodejs:yarn_repositories.bzl", "yarn_repositories")
 
 node_repositories(
     node_repositories = {
@@ -210,8 +219,11 @@ node_repositories(
         "https://storage.googleapis.com/public-bazel-artifacts/js/node/v{version}/{filename}",
     ],
     node_version = "16.13.0",
-    package_json = ["//pkg/ui:package.json"],
-    yarn_repositories = {
+)
+
+yarn_repositories(
+    name = "yarn",
+    yarn_releases = {
         "1.22.11": ("yarn-v1.22.11.tar.gz", "yarn-v1.22.11", "2c320de14a6014f62d29c34fec78fdbb0bc71c9ccba48ed0668de452c1f5fe6c"),
     },
     yarn_urls = [

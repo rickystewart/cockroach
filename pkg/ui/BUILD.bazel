@@ -55,14 +55,6 @@ EOF
     visibility = ["//pkg/ui:__subpackages__"],
 )
 
-genrule(
-    name = "listjs",
-    srcs = ["@npm//:node_modules/list.js/dist/list.min.js"],
-    outs = ["dist_vendor/list.min.js"],
-    cmd = "cp ./$(location @npm//:node_modules/list.js/dist/list.min.js) $@",
-    tools = ["@npm//list.js"],
-)
-
 test_suite(
     name = "lint",
     tests = [
