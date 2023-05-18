@@ -533,7 +533,7 @@ message DecommissionPreCheckResponse {
     NodeReadiness decommission_readiness = 2;
 
     // The liveness status of the given node.
-    kv.kvserver.liveness.livenesspb.NodeLivenessStatus liveness_status = 3;
+    cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus liveness_status = 3;
 
     // The number of total replicas on the node, computed by scanning range
     // descriptors.
@@ -565,7 +565,7 @@ message DecommissionStatusRequest {
 message DecommissionRequest {
   repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
-  kv.kvserver.liveness.livenesspb.MembershipStatus target_membership = 2;
+  cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus target_membership = 2;
   // The number of decommissioning replicas to be reported.
   int32 num_replica_report = 3;
 }
@@ -585,7 +585,7 @@ message DecommissionStatusResponse {
     // The number of replicas on the node, computed by scanning meta2 ranges.
     int64 replica_count = 3;
     // The membership status of the given node.
-    kv.kvserver.liveness.livenesspb.MembershipStatus membership = 4;
+    cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus membership = 4;
     bool draining = 5;
     // Decommissioning replicas on the given node to be reported.
     // How many replicas are reported is determined by what was specified in the
@@ -660,8 +660,8 @@ message LivenessRequest {
 
 // LivenessResponse contains the liveness status of each node on the cluster.
 message LivenessResponse {
-  repeated kv.kvserver.liveness.livenesspb.Liveness livenesses = 1 [(gogoproto.nullable) = false];
-  map<int32, kv.kvserver.liveness.livenesspb.NodeLivenessStatus> statuses = 2 [
+  repeated cockroach.kv.kvserver.liveness.livenesspb.Liveness livenesses = 1 [(gogoproto.nullable) = false];
+  map<int32, cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus> statuses = 2 [
     (gogoproto.nullable) = false,
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
   ];
@@ -1000,7 +1000,7 @@ message RecoveryVerifyResponse {
   UnavailableRanges unavailable_ranges = 2 [(gogoproto.nullable) = false];
   // DecommissionedNodeStatuses contains a map of requested IDs with their
   // corresponding liveness statuses.
-  map<int32, kv.kvserver.liveness.livenesspb.MembershipStatus> decommissioned_node_statuses = 3 [
+  map<int32, cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus> decommissioned_node_statuses = 3 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 }
 

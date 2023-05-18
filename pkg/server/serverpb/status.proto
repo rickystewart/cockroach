@@ -127,7 +127,7 @@ message NodesResponse {
   // API: PUBLIC ALPHA
   repeated server.status.statuspb.NodeStatus nodes = 1 [ (gogoproto.nullable) = false ];
   // liveness_by_node_id maps each node ID to a liveness status.
-  map<int32, kv.kvserver.liveness.livenesspb.NodeLivenessStatus> liveness_by_node_id = 2 [
+  map<int32, cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus> liveness_by_node_id = 2 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "LivenessByNodeID"
@@ -141,7 +141,7 @@ message NodesResponseExternal {
   // API: PUBLIC ALPHA
   repeated NodeResponse nodes = 1 [ (gogoproto.nullable) = false ];
   // liveness_by_node_id maps each node ID to a liveness status.
-  map<int32, kv.kvserver.liveness.livenesspb.NodeLivenessStatus> liveness_by_node_id = 2 [
+  map<int32, cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus> liveness_by_node_id = 2 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "LivenessByNodeID"
@@ -486,7 +486,7 @@ message TenantRangeInfo {
 message RangeInfo {
   PrettySpan span = 1 [ (gogoproto.nullable) = false ];
   RaftState raft_state = 2 [ (gogoproto.nullable) = false ];
-  kv.kvserver.storagepb.RangeInfo state = 4 [ (gogoproto.nullable) = false ];
+  cockroach.kv.kvserver.storagepb.RangeInfo state = 4 [ (gogoproto.nullable) = false ];
   int32 source_node_id = 5 [
     (gogoproto.customname) = "SourceNodeID",
     (gogoproto.casttype) =
@@ -502,7 +502,7 @@ message RangeInfo {
   RangeProblems problems = 9 [ (gogoproto.nullable) = false ];
   RangeStatistics stats = 10 [ (gogoproto.nullable) = false ];
   reserved 11, 12;
-  kv.kvserver.storagepb.LeaseStatus lease_status = 13 [ (gogoproto.nullable) = false ];
+  cockroach.kv.kvserver.storagepb.LeaseStatus lease_status = 13 [ (gogoproto.nullable) = false ];
   bool quiescent = 14;
   bool ticking = 15;
   int64 read_latches = 16;

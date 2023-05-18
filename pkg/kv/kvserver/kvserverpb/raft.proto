@@ -37,7 +37,7 @@ message RaftHeartbeat {
   uint64 commit = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftIndex"];
   bool quiesce = 6;
   reserved 7;
-  repeated kv.kvserver.liveness.livenesspb.Liveness lagging_followers_on_quiesce = 8 [(gogoproto.nullable) = false];
+  repeated cockroach.kv.kvserver.liveness.livenesspb.Liveness lagging_followers_on_quiesce = 8 [(gogoproto.nullable) = false];
   // This field helps migrate in the lagging_followers_on_quiesce field. For
   // messages sent by versions of Cockroach that do not know about the
   // lagging_followers_on_quiesce field (i.e. v20.1), we need to assume that all
@@ -84,7 +84,7 @@ message RaftMessageRequest {
   // (leader or follower) becomes aware that a replica in this set has
   // become live, it should unquiesce the range so that the replica can
   // be caught back up.
-  repeated kv.kvserver.liveness.livenesspb.Liveness lagging_followers_on_quiesce = 9 [(gogoproto.nullable) = false];
+  repeated cockroach.kv.kvserver.liveness.livenesspb.Liveness lagging_followers_on_quiesce = 9 [(gogoproto.nullable) = false];
 
   // A coalesced heartbeat request is any RaftMessageRequest with a nonzero number of
   // heartbeats or heartbeat_resps.
@@ -93,7 +93,7 @@ message RaftMessageRequest {
 
   // AdmittedRaftLogEntries is coalesced information about all raft log entries
   // that were admitted below raft.
-  repeated kv.kvserver.kvflowcontrol.kvflowcontrolpb.AdmittedRaftLogEntries admitted_raft_log_entries = 11 [(gogoproto.nullable) = false];
+  repeated cockroach.kv.kvserver.kvflowcontrol.kvflowcontrolpb.AdmittedRaftLogEntries admitted_raft_log_entries = 11 [(gogoproto.nullable) = false];
 
   reserved 10;
 }
