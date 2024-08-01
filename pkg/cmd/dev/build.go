@@ -125,26 +125,6 @@ var allBuildTargets = func() []string {
 }()
 
 func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
-	var tmpDir string
-	if !buildutil.CrdbTestBuild {
-		// tmpDir will contain the build event binary file if produced.
-		var err error
-		tmpDir, err = os.MkdirTemp("", "")
-		if err != nil {
-			return err
-		}
-	}
-	defer func() {
-		if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
-			// Retry.
-			if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil && d.debug {
-				log.Printf("Internal Error: Sending BEP file to beaver hub failed - %v", err)
-			}
-		}
-		if !buildutil.CrdbTestBuild {
-			_ = os.RemoveAll(tmpDir)
-		}
-	}()
 	targets, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	cross := mustGetFlagString(cmd, crossFlag)
@@ -165,29 +145,53 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 		return err
 	}
 	args = append(args, additionalBazelArgs...)
-	configArgs := getConfigArgs(args)
 
 	if err := d.assertNoLinkedNpmDeps(buildTargets); err != nil {
 		return err
 	}
 
 	if cross == "" {
-		// Do not log --build_event_binary_file=... because it is not relevant to the actual call
-		// from the user perspective.
-		logCommand("bazel", args...)
-		if buildutil.CrdbTestBuild {
-			args = append(args, "--build_event_binary_file=/tmp/path")
-		} else {
-			args = append(args, fmt.Sprintf("--build_event_binary_file=%s", filepath.Join(tmpDir, bepFileBasename)))
-		}
-		if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
-			return err
-		}
-		return d.stageArtifacts(ctx, buildTargets, configArgs)
+		return d.basicBuild(ctx, args, buildTargets, "")
 	}
 	volume := mustGetFlagString(cmd, volumeFlag)
 	cross = "cross" + cross
 	return d.crossBuild(ctx, args, buildTargets, cross, volume, dockerArgs)
+}
+
+func (d *dev) basicBuild(ctx context.Context, bazelArgs []string, targets []buildTarget, stagingDir string) error {
+	var tmpDir string
+	if !buildutil.CrdbTestBuild {
+		// tmpDir will contain the build event binary file if produced.
+		var err error
+		tmpDir, err = os.MkdirTemp("", "")
+		if err != nil {
+			return err
+		}
+	}
+	defer func() {
+		if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
+			// Retry.
+			if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil && d.debug {
+				log.Printf("Internal Error: Sending BEP file to beaver hub failed - %v", err)
+			}
+		}
+		if !buildutil.CrdbTestBuild {
+			_ = os.RemoveAll(tmpDir)
+		}
+	}()
+	configArgs := getConfigArgs(bazelArgs)
+	// Do not log --build_event_binary_file=... because it is not relevant to the actual call
+	// from the user perspective.
+	logCommand("bazel", bazelArgs...)
+	if buildutil.CrdbTestBuild {
+		bazelArgs = append(bazelArgs, "--build_event_binary_file=/tmp/path")
+	} else {
+		bazelArgs = append(bazelArgs, fmt.Sprintf("--build_event_binary_file=%s", filepath.Join(tmpDir, bepFileBasename)))
+	}
+	if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", bazelArgs...); err != nil {
+		return err
+	}
+	return d.stageArtifacts(ctx, targets, configArgs, stagingDir)
 }
 
 func (d *dev) crossBuild(
@@ -198,6 +202,19 @@ func (d *dev) crossBuild(
 	volume string,
 	dockerArgs []string,
 ) error {
+	// Check whether the chosen configuration in .bazelrc.user matches up
+	// to the chosen crossConfig. If it does, we can save time by just doing
+	// a normal build.
+	if !buildutil.CrdbTestBuild {
+		workspace, err := d.getWorkspace(ctx)
+		if err == nil && d.checkUsingConfig(workspace, crossConfig) {
+			// To match up to a normal release build, build with
+			// -c opt. TODO(ricky): Consider making all cross builds
+			// build with -c opt?
+			bazelArgs = append(bazelArgs, "-c", "opt")
+			return d.basicBuild(ctx, bazelArgs, targets, "artifacts")
+		}
+	}
 	bazelArgs = append(bazelArgs, fmt.Sprintf("--config=%s", crossConfig), "--config=ci", "-c", "opt")
 	configArgs := getConfigArgs(bazelArgs)
 	dockerArgs, err := d.getDockerRunArgs(ctx, volume, false, dockerArgs)
@@ -256,19 +273,25 @@ func (d *dev) crossBuild(
 }
 
 func (d *dev) stageArtifacts(
-	ctx context.Context, targets []buildTarget, configArgs []string,
+	ctx context.Context, targets []buildTarget, configArgs []string, where string,
 ) error {
 	workspace, err := d.getWorkspace(ctx)
 	if err != nil {
 		return err
 	}
 	// Create the bin directory.
-	if err = d.os.MkdirAll(path.Join(workspace, "bin")); err != nil {
+	if err = d.os.MkdirAll(path.Join(workspace, where)); err != nil {
 		return err
 	}
 	bazelBin, err := d.getBazelBin(ctx, configArgs)
 	if err != nil {
 		return err
+	}
+	var stagingDir string
+	if where != "" {
+		stagingDir = where
+	} else {
+		stagingDir = "bin"
 	}
 
 	for _, target := range targets {
@@ -308,7 +331,12 @@ func (d *dev) stageArtifacts(
 			}
 			for _, whichLib := range []string{"libgeos.", "libgeos_c."} {
 				baseName := whichLib + ext
-				dst := filepath.Join(workspace, "lib", baseName)
+				var dst string
+				if where != "" {
+					dst = filepath.Join(workspace, where, baseName)
+				} else {
+					dst = filepath.Join(workspace, "lib", baseName)
+				}
 				if err := d.os.CopyFile(filepath.Join(geosDir, libDir, baseName), dst); err != nil {
 					return err
 				}
@@ -342,9 +370,9 @@ func (d *dev) stageArtifacts(
 			}
 
 			copyPaths = append(copyPaths,
-				filepath.Join(workspace, "bin", "dev-versions", fmt.Sprintf("dev.%s", devVersion)))
+				filepath.Join(workspace, stagingDir, "dev-versions", fmt.Sprintf("dev.%s", devVersion)))
 		} else {
-			copyPaths = append(copyPaths, filepath.Join(workspace, "bin", base))
+			copyPaths = append(copyPaths, filepath.Join(workspace, stagingDir, base))
 		}
 
 		// Copy from binaryPath -> copyPath, clear out detritus, if any.
